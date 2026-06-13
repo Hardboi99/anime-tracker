@@ -54,7 +54,7 @@ export default function WatchlistPage() {
       const data = await res.json();
       setWatchlist(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Failed to fetch watchlist:", err);
+      console.warn("Failed to fetch watchlist:", err);
       setWatchlist([]);
     } finally {
       setLoading(false);
@@ -93,7 +93,7 @@ export default function WatchlistPage() {
         prev.map((item) => (item.id === entry.id ? { ...item, currentEpisode: updated.currentEpisode ?? newEp } : item))
       );
     } catch (err) {
-      console.error("Failed to update episode progress:", err);
+      console.warn("Failed to update episode progress:", err);
       // Rollback to original value
       setWatchlist((prev) =>
         prev.map((item) => (item.id === entry.id ? { ...item, currentEpisode: originalEpisode } : item))
@@ -125,7 +125,7 @@ export default function WatchlistPage() {
         prev.map((item) => (item.id === entry.id ? { ...item, status: updated.status ?? status } : item))
       );
     } catch (err) {
-      console.error("Failed to update status:", err);
+      console.warn("Failed to update status:", err);
       // Rollback to original value
       setWatchlist((prev) =>
         prev.map((item) => (item.id === entry.id ? { ...item, status: originalStatus } : item))
@@ -141,7 +141,7 @@ export default function WatchlistPage() {
         setWatchlist((prev) => prev.filter((item) => item.id !== id));
       }
     } catch (err) {
-      console.error(err);
+      console.warn(err);
     }
   }
 

@@ -48,7 +48,7 @@ export default function SearchPage() {
           setAddedIds(new Set(watchlistData.map((e: any) => e.animeId)));
         }
       } catch (err) {
-        console.error("Failed to load initial data:", err);
+        console.warn("Failed to load initial data:", err);
       }
     }
     loadInitialData();
@@ -63,7 +63,7 @@ export default function SearchPage() {
         setAddedIds(new Set(data.map((e: any) => e.animeId)));
       }
     } catch (err) {
-      console.error(err);
+      console.warn(err);
     }
   }
 
@@ -78,7 +78,7 @@ export default function SearchPage() {
       const data: SearchResult = await res.json();
       setResults(data.data || []);
     } catch {
-      console.error("Search failed");
+      console.warn("Search failed");
     } finally {
       setLoading(false);
     }
@@ -105,7 +105,7 @@ export default function SearchPage() {
         refreshWatchlist();
       }
     } catch (err) {
-      console.error(err);
+      console.warn(err);
     }
   }
 

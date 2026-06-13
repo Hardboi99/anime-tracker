@@ -46,7 +46,7 @@ export default function DashboardPage() {
       const data = await res.json();
       setWatchlist(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("Failed to fetch dashboard data:", err);
+      console.warn("Failed to fetch dashboard data:", err);
       setWatchlist([]);
     } finally {
       setLoading(false);

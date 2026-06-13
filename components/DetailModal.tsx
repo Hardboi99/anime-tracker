@@ -48,7 +48,7 @@ export default function DetailModal({ animeId, watchlistEntry, onClose, onUpdate
         const data = await res.json();
         setDetails(data.data);
       } catch (err: any) {
-        console.error(err);
+        console.warn(err);
         setError("Could not load anime details. Please try again.");
       } finally {
         setLoading(false);
@@ -98,7 +98,7 @@ export default function DetailModal({ animeId, watchlistEntry, onClose, onUpdate
       onUpdate();
       onClose();
     } catch (err) {
-      console.error(err);
+      console.warn(err);
       alert("Failed to save changes. Please try again.");
     } finally {
       setSaving(false);
