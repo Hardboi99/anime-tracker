@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export default function proxy(req: NextRequest) {
+export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isAuthRoute = pathname === "/login" || pathname === "/signup";

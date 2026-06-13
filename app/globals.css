@@ -328,6 +328,10 @@ body {
   color: white;
 }
 
+.episode-btn:active {
+  transform: scale(0.9);
+}
+
 /* Stat card */
 .stat-card {
   background: var(--bg-card);

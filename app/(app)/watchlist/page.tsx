@@ -60,28 +60,69 @@ export default function WatchlistPage() {
   }, [fetchWatchlist]);
 
   async function updateEpisode(entry: WatchlistEntry, delta: number) {
-    const newEp = Math.max(0, entry.currentEpisode + delta);
-    const res = await fetch("/api/watchlist", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: entry.id, currentEpisode: newEp }),
-    });
-    const updated = await res.json();
+    const originalEpisode = entry.currentEpisode;
+    const newEp = entry.anime.episodes > 0 
+      ? Math.min(entry.anime.episodes, Math.max(0, originalEpisode + delta))
+      : Math.max(0, originalEpisode + delta);
+
+    if (newEp === originalEpisode) return;
+
+    // Optimistically update local state
     setWatchlist((prev) =>
-      prev.map((e) => (e.id === entry.id ? { ...e, currentEpisode: updated.currentEpisode } : e))
+      prev.map((e) => (e.id === entry.id ? { ...e, currentEpisode: newEp } : e))
     );
+
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: entry.id, currentEpisode: newEp }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to save episode progress");
+      }
+      const updated = await res.json();
+      setWatchlist((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, currentEpisode: updated.currentEpisode ?? newEp } : e))
+      );
+    } catch (err) {
+      console.error("Failed to update episode progress:", err);
+      // Rollback to original value
+      setWatchlist((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, currentEpisode: originalEpisode } : e))
+      );
+    }
   }
 
   async function updateStatus(entry: WatchlistEntry, status: Status) {
-    const res = await fetch("/api/watchlist", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: entry.id, status }),
-    });
-    const updated = await res.json();
+    const originalStatus = entry.status;
+    if (status === originalStatus) return;
+
+    // Optimistically update local state
     setWatchlist((prev) =>
-      prev.map((e) => (e.id === entry.id ? { ...e, status: updated.status } : e))
+      prev.map((e) => (e.id === entry.id ? { ...e, status } : e))
     );
+
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: entry.id, status }),
+      });
+      if (!res.ok) {
+        throw new Error("Failed to save status update");
+      }
+      const updated = await res.json();
+      setWatchlist((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, status: updated.status ?? status } : e))
+      );
+    } catch (err) {
+      console.error("Failed to update status:", err);
+      // Rollback to original value
+      setWatchlist((prev) =>
+        prev.map((e) => (e.id === entry.id ? { ...e, status: originalStatus } : e))
+      );
+    }
   }
 
   async function removeEntry(id: string) {
