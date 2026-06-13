@@ -70,6 +70,16 @@ function setupVideoListeners(video) {
       lastProgress = progress;
       const details = extractAnimeDetails();
 
+      // Store in chrome.storage.local for popup companion to access
+      chrome.storage.local.set({
+        currentAnime: {
+          title: details.title,
+          episode: details.episode,
+          progress: progress,
+          hostname: window.location.hostname
+        }
+      });
+
       // Send current progress to background service worker
       chrome.runtime.sendMessage({
         type: "PROGRESS_UPDATE",
