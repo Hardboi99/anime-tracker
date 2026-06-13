@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import DetailModal from "@/components/DetailModal";
 
 type Status = "WATCHING" | "COMPLETED" | "DROPPED" | "PLAN_TO_WATCH";
 
@@ -11,6 +12,7 @@ interface WatchlistEntry {
   status: Status;
   currentEpisode: number;
   rating: number | null;
+  userRating?: number | null;
   anime: {
     title: string;
     image: string;
@@ -38,6 +40,10 @@ export default function WatchlistPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Status | "ALL">("ALL");
 
+  // Modal State
+  const [selectedAnimeId, setSelectedAnimeId] = useState<number | null>(null);
+  const [selectedWatchlistEntry, setSelectedWatchlistEntry] = useState<any>(null);
+
   const fetchWatchlist = useCallback(async () => {
     setLoading(true);
     try {
@@ -59,7 +65,8 @@ export default function WatchlistPage() {
     fetchWatchlist();
   }, [fetchWatchlist]);
 
-  async function updateEpisode(entry: WatchlistEntry, delta: number) {
+  async function updateEpisode(e: React.MouseEvent, entry: WatchlistEntry, delta: number) {
+    e.stopPropagation(); // Stop card click modal trigger
     const originalEpisode = entry.currentEpisode;
     const newEp = entry.anime.episodes > 0 
       ? Math.min(entry.anime.episodes, Math.max(0, originalEpisode + delta))
@@ -69,7 +76,7 @@ export default function WatchlistPage() {
 
     // Optimistically update local state
     setWatchlist((prev) =>
-      prev.map((e) => (e.id === entry.id ? { ...e, currentEpisode: newEp } : e))
+      prev.map((item) => (item.id === entry.id ? { ...item, currentEpisode: newEp } : item))
     );
 
     try {
@@ -83,24 +90,25 @@ export default function WatchlistPage() {
       }
       const updated = await res.json();
       setWatchlist((prev) =>
-        prev.map((e) => (e.id === entry.id ? { ...e, currentEpisode: updated.currentEpisode ?? newEp } : e))
+        prev.map((item) => (item.id === entry.id ? { ...item, currentEpisode: updated.currentEpisode ?? newEp } : item))
       );
     } catch (err) {
       console.error("Failed to update episode progress:", err);
       // Rollback to original value
       setWatchlist((prev) =>
-        prev.map((e) => (e.id === entry.id ? { ...e, currentEpisode: originalEpisode } : e))
+        prev.map((item) => (item.id === entry.id ? { ...item, currentEpisode: originalEpisode } : item))
       );
     }
   }
 
-  async function updateStatus(entry: WatchlistEntry, status: Status) {
+  async function updateStatus(e: React.ChangeEvent<HTMLSelectElement>, entry: WatchlistEntry, status: Status) {
+    e.stopPropagation(); // Stop card click modal trigger
     const originalStatus = entry.status;
     if (status === originalStatus) return;
 
     // Optimistically update local state
     setWatchlist((prev) =>
-      prev.map((e) => (e.id === entry.id ? { ...e, status } : e))
+      prev.map((item) => (item.id === entry.id ? { ...item, status } : item))
     );
 
     try {
@@ -114,31 +122,47 @@ export default function WatchlistPage() {
       }
       const updated = await res.json();
       setWatchlist((prev) =>
-        prev.map((e) => (e.id === entry.id ? { ...e, status: updated.status ?? status } : e))
+        prev.map((item) => (item.id === entry.id ? { ...item, status: updated.status ?? status } : item))
       );
     } catch (err) {
       console.error("Failed to update status:", err);
       // Rollback to original value
       setWatchlist((prev) =>
-        prev.map((e) => (e.id === entry.id ? { ...e, status: originalStatus } : e))
+        prev.map((item) => (item.id === entry.id ? { ...item, status: originalStatus } : item))
       );
     }
   }
 
-  async function removeEntry(id: string) {
-    await fetch(`/api/watchlist?id=${id}`, { method: "DELETE" });
-    setWatchlist((prev) => prev.filter((e) => e.id !== id));
+  async function removeEntry(e: React.MouseEvent, id: string) {
+    e.stopPropagation(); // Stop card click modal trigger
+    try {
+      const res = await fetch(`/api/watchlist?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setWatchlist((prev) => prev.filter((item) => item.id !== id));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function handleOpenModal(entry: WatchlistEntry) {
+    setSelectedWatchlistEntry({
+      status: entry.status,
+      currentEpisode: entry.currentEpisode,
+      userRating: entry.userRating || null
+    });
+    setSelectedAnimeId(entry.animeId);
   }
 
   const filtered =
-    filter === "ALL" ? watchlist : watchlist.filter((e) => e.status === filter);
+    filter === "ALL" ? watchlist : watchlist.filter((entry) => entry.status === filter);
 
   const counts: Record<string, number> = {
     ALL: watchlist.length,
-    WATCHING: watchlist.filter((e) => e.status === "WATCHING").length,
-    COMPLETED: watchlist.filter((e) => e.status === "COMPLETED").length,
-    DROPPED: watchlist.filter((e) => e.status === "DROPPED").length,
-    PLAN_TO_WATCH: watchlist.filter((e) => e.status === "PLAN_TO_WATCH").length,
+    WATCHING: watchlist.filter((entry) => entry.status === "WATCHING").length,
+    COMPLETED: watchlist.filter((entry) => entry.status === "COMPLETED").length,
+    DROPPED: watchlist.filter((entry) => entry.status === "DROPPED").length,
+    PLAN_TO_WATCH: watchlist.filter((entry) => entry.status === "PLAN_TO_WATCH").length,
   };
 
   return (
@@ -206,12 +230,17 @@ export default function WatchlistPage() {
             <div
               key={entry.id}
               className="glass fade-in"
+              onClick={() => handleOpenModal(entry)}
               style={{
                 display: "flex",
                 gap: "16px",
                 padding: "16px",
                 alignItems: "center",
+                cursor: "pointer",
+                transition: "border-color 0.2s ease"
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
             >
               {/* Poster */}
               <div
@@ -230,6 +259,7 @@ export default function WatchlistPage() {
                   fill
                   style={{ objectFit: "cover" }}
                   sizes="60px"
+                  unoptimized
                 />
               </div>
 
@@ -251,6 +281,11 @@ export default function WatchlistPage() {
                   <span className={`badge ${STATUS_BADGE[entry.status]}`}>
                     {STATUS_LABELS[entry.status]}
                   </span>
+                  {entry.userRating && (
+                    <span style={{ fontSize: "12px", color: "#fbbf24", fontWeight: 700 }}>
+                      ⭐ {entry.userRating}/10
+                    </span>
+                  )}
                 </div>
 
                 {/* Genres */}
@@ -274,11 +309,11 @@ export default function WatchlistPage() {
 
                 {/* Episode counter */}
                 <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-                  <div className="episode-counter">
+                  <div className="episode-counter" onClick={(e) => e.stopPropagation()}>
                     <button
                       id={`ep-minus-${entry.id}`}
                       className="episode-btn"
-                      onClick={() => updateEpisode(entry, -1)}
+                      onClick={(e) => updateEpisode(e, entry, -1)}
                     >
                       −
                     </button>
@@ -289,7 +324,7 @@ export default function WatchlistPage() {
                     <button
                       id={`ep-plus-${entry.id}`}
                       className="episode-btn"
-                      onClick={() => updateEpisode(entry, 1)}
+                      onClick={(e) => updateEpisode(e, entry, 1)}
                     >
                       +
                     </button>
@@ -302,7 +337,8 @@ export default function WatchlistPage() {
                 <select
                   id={`status-${entry.id}`}
                   value={entry.status}
-                  onChange={(e) => updateStatus(entry, e.target.value as Status)}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => updateStatus(e, entry, e.target.value as Status)}
                   style={{
                     background: "var(--bg-secondary)",
                     border: "1px solid var(--border)",
@@ -322,7 +358,7 @@ export default function WatchlistPage() {
                 </select>
                 <button
                   id={`remove-${entry.id}`}
-                  onClick={() => removeEntry(entry.id)}
+                  onClick={(e) => removeEntry(e, entry.id)}
                   style={{
                     background: "rgba(239,68,68,0.08)",
                     border: "1px solid rgba(239,68,68,0.2)",
@@ -340,6 +376,19 @@ export default function WatchlistPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Info & Trailer Modal */}
+      {selectedAnimeId && (
+        <DetailModal
+          animeId={selectedAnimeId}
+          watchlistEntry={selectedWatchlistEntry}
+          onClose={() => {
+            setSelectedAnimeId(null);
+            setSelectedWatchlistEntry(null);
+          }}
+          onUpdate={fetchWatchlist}
+        />
       )}
     </div>
   );

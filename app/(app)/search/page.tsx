@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import DetailModal from "@/components/DetailModal";
 
 interface Anime {
   mal_id: number;
@@ -22,16 +23,49 @@ export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Anime[]>([]);
   const [loading, setLoading] = useState(false);
+  const [watchlist, setWatchlist] = useState<any[]>([]);
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [topAnime, setTopAnime] = useState<Anime[]>([]);
 
-  // Load top anime on mount
+  // Modal State
+  const [selectedAnimeId, setSelectedAnimeId] = useState<number | null>(null);
+  const [selectedWatchlistEntry, setSelectedWatchlistEntry] = useState<any>(null);
+
+  // Load watchlist & top anime on mount
   useEffect(() => {
-    fetch("https://api.jikan.moe/v4/top/anime?limit=12")
-      .then((r) => r.json())
-      .then((d: SearchResult) => setTopAnime(d.data || []))
-      .catch(console.error);
+    async function loadInitialData() {
+      try {
+        // Fetch top anime
+        const topRes = await fetch("https://api.jikan.moe/v4/top/anime?limit=12");
+        const topData: SearchResult = await topRes.json();
+        setTopAnime(topData.data || []);
+
+        // Fetch watchlist to sync added badges and pass details to modal
+        const watchlistRes = await fetch("/api/watchlist");
+        if (watchlistRes.ok) {
+          const watchlistData = await watchlistRes.json();
+          setWatchlist(watchlistData);
+          setAddedIds(new Set(watchlistData.map((e: any) => e.animeId)));
+        }
+      } catch (err) {
+        console.error("Failed to load initial data:", err);
+      }
+    }
+    loadInitialData();
   }, []);
+
+  async function refreshWatchlist() {
+    try {
+      const res = await fetch("/api/watchlist");
+      if (res.ok) {
+        const data = await res.json();
+        setWatchlist(data);
+        setAddedIds(new Set(data.map((e: any) => e.animeId)));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -50,21 +84,35 @@ export default function SearchPage() {
     }
   }
 
-  async function addToWatchlist(anime: Anime, status = "PLAN_TO_WATCH") {
-    await fetch("/api/watchlist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        animeId: anime.mal_id,
-        title: anime.title,
-        image: anime.images.jpg.large_image_url,
-        episodes: anime.episodes || 0,
-        genres: anime.genres.map((g) => g.name),
-        rating: anime.score || 0,
-        status,
-      }),
-    });
-    setAddedIds((prev) => new Set([...prev, anime.mal_id]));
+  async function addToWatchlist(e: React.MouseEvent, anime: Anime, status = "PLAN_TO_WATCH") {
+    e.stopPropagation(); // Prevent card click modal trigger
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          animeId: anime.mal_id,
+          title: anime.title,
+          image: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
+          episodes: anime.episodes || 0,
+          genres: anime.genres.map((g) => g.name),
+          rating: anime.score || 0,
+          status,
+        }),
+      });
+      if (res.ok) {
+        setAddedIds((prev) => new Set([...prev, anime.mal_id]));
+        refreshWatchlist();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function handleOpenModal(animeId: number) {
+    const entry = watchlist.find((e) => e.animeId === animeId);
+    setSelectedWatchlistEntry(entry || null);
+    setSelectedAnimeId(animeId);
   }
 
   const displayList = results.length > 0 ? results : topAnime;
@@ -145,7 +193,11 @@ export default function SearchPage() {
           }}
         >
           {displayList.map((anime) => (
-            <div key={anime.mal_id} className="anime-card fade-in">
+            <div
+              key={anime.mal_id}
+              className="anime-card fade-in"
+              onClick={() => handleOpenModal(anime.mal_id)}
+            >
               {/* Poster */}
               <div style={{ position: "relative", height: "260px", overflow: "hidden" }}>
                 <Image
@@ -154,6 +206,7 @@ export default function SearchPage() {
                   fill
                   style={{ objectFit: "cover" }}
                   sizes="200px"
+                  unoptimized
                 />
                 {/* Score badge */}
                 {anime.score && (
@@ -218,7 +271,7 @@ export default function SearchPage() {
 
                 <button
                   id={`add-watchlist-${anime.mal_id}`}
-                  onClick={() => addToWatchlist(anime)}
+                  onClick={(e) => addToWatchlist(e, anime)}
                   disabled={addedIds.has(anime.mal_id)}
                   style={{
                     width: "100%",
@@ -256,6 +309,19 @@ export default function SearchPage() {
           <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔍</div>
           <p>No results for &quot;{query}&quot;. Try a different title.</p>
         </div>
+      )}
+
+      {/* Info & Trailer Modal */}
+      {selectedAnimeId && (
+        <DetailModal
+          animeId={selectedAnimeId}
+          watchlistEntry={selectedWatchlistEntry}
+          onClose={() => {
+            setSelectedAnimeId(null);
+            setSelectedWatchlistEntry(null);
+          }}
+          onUpdate={refreshWatchlist}
+        />
       )}
     </div>
   );
