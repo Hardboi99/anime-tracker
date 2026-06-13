@@ -388,9 +388,92 @@ This file renders your watchlist dashboard card list. Let's analyze how **Optimi
 
 ---
 
-## 💡 4. How to Build Your Own Project Next Time
+## 💡 4. Chrome Extension Architecture & Development
 
-If you want to construct your own web application from scratch, follow this exact workflow:
+The Chrome Extension allows automated progress tracking when users watch episodes on third-party video players.
+
+### File 1: `extension/manifest.json` (Configuration)
+The manifest file tells Google Chrome what permissions our extension requires and which scripts to execute.
+```json
+{
+  "manifest_version": 3,
+  "name": "AniTrack",
+  "version": "1.0",
+  "description": "Automatically track your anime progress on streaming websites.",
+  "permissions": [
+    "activeTab",
+    "notifications",
+    "storage"
+  ],
+  "icons": {
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
+```
+* **manifest_version**: Tells Chrome we are using Manifest V3 (the current extension standard).
+* **permissions**: `"activeTab"` lets us query the current page's URL. `"notifications"` enables showing desktop push alerts.
+* **content_scripts**: Runs `content.js` inside the context of any page matching the list (here, `<all_urls>`).
+
+### File 2: `extension/content.js` (DOM Analysis & Video Listeners)
+This script runs in the context of the webpage the user is viewing. It detects HTML5 video tags and calculates playback.
+```javascript
+// Scan for video elements periodically to catch dynamic loads
+const scanInterval = setInterval(scanForVideo, 1000);
+
+function scanForVideo() {
+  const video = document.querySelector("video");
+  if (video && !videoDetected) {
+    videoDetected = true;
+    observedVideo = video;
+    setupVideoListeners(video);
+  }
+}
+```
+* **Episode Completion**: Listens to the `timeupdate` event on the video and sends a message to the background service worker once it crosses $80\%$ completion:
+  ```javascript
+  const progress = Math.round((currentTime / duration) * 100);
+  if (progress >= 80 && !completedLogged) {
+    completedLogged = true;
+    chrome.runtime.sendMessage({
+      type: "PROGRESS_UPDATE",
+      data: { animeName, episode, progress }
+    });
+  }
+  ```
+
+### File 3: `extension/background.js` (Background Service Worker)
+Because browser security policies (CORS) block scripts inside web pages from talking to other websites, the extension background service worker handles all remote API requests.
+* **Jikan API Caching**: Caches anime lookups in memory to prevent exceeding the Jikan API's request limits.
+* **Server Cookie Syncing**: Uses `credentials: 'include'` when fetching `localhost:3000/api/progress` to automatically include the user's logged-in Firebase session cookies.
+* **Auto-Watchlist Ingestion**: If the server returns `404` (anime not tracked yet), it POSTs to `/api/watchlist` to automatically add it to the user's watchlist before syncing the episode progress.
+* **Chrome Notifications**:
+  ```javascript
+  chrome.notifications.create({
+    type: "basic",
+    iconUrl: "icons/icon128.png",
+    title: "AniTrack Watch Sync",
+    message: `Episode ${episode} of ${title} completed! 🎉`
+  });
+  ```
+
+---
+
+## 💡 5. How to Build Your Own Project Next Time
+
+If you want to construct your own web application and browser extension from scratch, follow this exact workflow:
 
 1. **Ideation & Mocking**:
    - Write down the features you want (e.g. "I want to track books", "I want to log tasks").
@@ -410,3 +493,8 @@ If you want to construct your own web application from scratch, follow this exac
 7. **Perform Optimizations**:
    - Convert standard button click handlers to use **Optimistic Updates** so clicking them feels satisfyingly instant.
    - Polish styles with CSS transitions and `:active` scaling.
+8. **Create the Browser Extension**:
+   - Declare your Manifest V3 config file.
+   - Inject a content script to monitor browser tabs and DOM trees.
+   - Create a background service worker to fetch APIs and execute native desktop operations.
+
